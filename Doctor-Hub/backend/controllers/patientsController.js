@@ -41,7 +41,7 @@ export async function getDoctorPatients(req, res) {
     }
 
     const patients = Array.from(patientMap.values())
-    return res.json({ success: true, data: patients, total: patients.length })
+    return res.json({ success: true, data: patients, patients, total: patients.length })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }

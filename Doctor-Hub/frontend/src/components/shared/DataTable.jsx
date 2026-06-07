@@ -1,6 +1,8 @@
 import { cn } from '../../lib/utils'
 
-const DataTable = ({ columns, data, emptyMessage = 'No records found.', className }) => (
+const DataTable = ({ columns, data = [], emptyMessage = 'No records found.', className }) => {
+  const rows = Array.isArray(data) ? data : []
+  return (
   <div className={cn('overflow-x-auto rounded-xl border border-surface-border', className)}>
     <table className="w-full text-sm">
       <thead>
@@ -16,14 +18,14 @@ const DataTable = ({ columns, data, emptyMessage = 'No records found.', classNam
         </tr>
       </thead>
       <tbody className="divide-y divide-surface-border bg-white">
-        {data.length === 0 ? (
+        {rows.length === 0 ? (
           <tr>
             <td colSpan={columns.length} className="px-4 py-12 text-center text-slate-400">
               {emptyMessage}
             </td>
           </tr>
         ) : (
-          data.map((row, i) => (
+          rows.map((row, i) => (
             <tr key={row.id || i} className="hover:bg-slate-50/50 transition-colors">
               {columns.map((col) => (
                 <td key={col.key} className={cn('px-4 py-3.5 text-slate-700', col.className)}>
@@ -36,6 +38,7 @@ const DataTable = ({ columns, data, emptyMessage = 'No records found.', classNam
       </tbody>
     </table>
   </div>
-)
+  )
+}
 
 export default DataTable

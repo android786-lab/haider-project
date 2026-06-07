@@ -43,7 +43,7 @@ assistantRouter.get('/pending-payments', async (req, res) => {
   try {
     const { userId, role } = req.auth
     const data = await listPendingPayments({ userId, role })
-    return res.json({ success: true, data, total: data.length })
+    return res.json({ success: true, data, payments: data, total: data.length })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }
@@ -111,7 +111,7 @@ assistantRouter.get('/bookings', async (req, res) => {
   try {
     const { userId, role } = req.auth
     const data = await listAppointmentsForUser({ userId, role })
-    return res.json({ success: true, data, total: data.length })
+    return res.json({ success: true, data, bookings: data, appointments: data, total: data.length })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }

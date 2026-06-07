@@ -3,6 +3,7 @@ import { body } from 'express-validator'
 import { authenticate } from '../middlewares/auth.js'
 import { validate } from '../middlewares/validate.js'
 import { forgotPassword, login, me, register, resetPassword } from '../controllers/authController.js'
+import { registerAdmin } from '../controllers/adminApprovalController.js'
 
 const authRouter = express.Router()
 
@@ -15,6 +16,18 @@ authRouter.post(
   ],
   validate,
   register
+)
+
+authRouter.post(
+  '/register-admin',
+  [
+    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('email').trim().isEmail().withMessage('Valid email is required'),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    body('phone').optional().isString(),
+  ],
+  validate,
+  registerAdmin
 )
 
 authRouter.post(

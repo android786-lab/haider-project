@@ -10,6 +10,7 @@ import { Card } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 import Textarea from '../../components/ui/Textarea'
 import { showSuccess } from '../../lib/toast'
+import { mapPendingPayment, normalizeList, resolveAssetUrl } from '../../lib/assistantMappers'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -24,7 +25,11 @@ const AssistantPendingPayments = () => {
   const fetchPayments = () => {
     setLoading(true)
     api.get('/api/assistant/pending-payments')
-      .then(({ data }) => { if (data.success) setPayments(data.payments) })
+      .then(({ data }) => {
+        if (data.success) {
+          setPayments(normalizeList(data, 'payments', 'data').map(mapPendingPayment))
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }
@@ -79,7 +84,7 @@ const AssistantPendingPayments = () => {
       key: 'screenshot',
       label: 'Screenshot',
       render: (p) => p.screenshotUrl ? (
-        <button onClick={() => setPreview(`${API_URL}${p.screenshotUrl}`)}
+        <button onClick={() => setPreview(resolveAssetUrl(p.screenshotUrl, API_URL))}
           className="text-primary-600 text-xs font-medium hover:underline">View</button>
       ) : <span className="text-slate-400 text-xs">—</span>,
     },

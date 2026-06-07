@@ -16,6 +16,48 @@ async function resolveDoctorName(doctorId) {
   return data
 }
 
+async function resolveDoctorUserId(doctorId) {
+  const normalizedId = String(doctorId || '').trim()
+  if (!normalizedId) throw new Error('Doctor not found')
+
+  const supabase = requireSupabase()
+
+  const { data: doctor, error: doctorErr } = await supabase
+    .from('doctors')
+    .select('user_id')
+    .eq('user_id', normalizedId)
+    .maybeSingle()
+
+  if (doctorErr) throw doctorErr
+  if (doctor) return doctor.user_id
+
+  const { data: user, error: userErr } = await supabase
+    .from('users')
+    .select('id, role')
+    .eq('id', normalizedId)
+    .maybeSingle()
+
+  if (userErr) throw userErr
+  if (!user || user.role !== 'doctor') throw new Error('Doctor not found')
+
+  const { error: insertErr } = await supabase.from('doctors').insert({
+    user_id: user.id,
+    treatment: 'allopathic',
+    speciality: 'General Physician',
+    degree: 'MBBS',
+    experience: '',
+    about: '',
+    fees: 0,
+    diseases: [],
+    available: true,
+    address: { line1: '', line2: '' },
+    slots_booked: {},
+  })
+
+  if (insertErr) throw insertErr
+  return user.id
+}
+
 async function validateAssignment({ doctorId, clinicId }) {
   if (!doctorId && !clinicId) {
     throw new Error('Assign at least one doctor or clinic')
@@ -23,13 +65,9 @@ async function validateAssignment({ doctorId, clinicId }) {
 
   const supabase = requireSupabase()
 
+  let resolvedDoctorId = null
   if (doctorId) {
-    const { data: doctor } = await supabase
-      .from('doctors')
-      .select('user_id')
-      .eq('user_id', doctorId)
-      .maybeSingle()
-    if (!doctor) throw new Error('Doctor not found')
+    resolvedDoctorId = await resolveDoctorUserId(doctorId)
   }
 
   if (clinicId) {
@@ -39,15 +77,15 @@ async function validateAssignment({ doctorId, clinicId }) {
       .eq('id', clinicId)
       .maybeSingle()
     if (!clinic) throw new Error('Clinic not found')
-    if (doctorId && clinic.doctor_id && clinic.doctor_id !== doctorId) {
+    if (resolvedDoctorId && clinic.doctor_id && clinic.doctor_id !== resolvedDoctorId) {
       throw new Error('Clinic does not belong to the selected doctor')
     }
-    if (!doctorId && clinic.doctor_id) {
+    if (!resolvedDoctorId && clinic.doctor_id) {
       return { doctorId: clinic.doctor_id, clinicId }
     }
   }
 
-  return { doctorId: doctorId || null, clinicId: clinicId || null }
+  return { doctorId: resolvedDoctorId || null, clinicId: clinicId || null }
 }
 
 function mapAssistantRow(row) {
@@ -253,4 +291,22 @@ export async function updateAssistant({
 
   const list = await listAssistants({ userId: null, role: 'admin' })
   return list.find((a) => a.user_id === assistantUserId)
+}
+
+export async function deleteAssistant(assistantUserId) {
+  const supabase = requireSupabase()
+
+  const { data: user, error: fetchErr } = await supabase
+    .from('users')
+    .select('id, role')
+    .eq('id', assistantUserId)
+    .maybeSingle()
+
+  if (fetchErr || !user) throw new Error('Assistant not found')
+  if (user.role !== 'assistant') throw new Error('User is not an assistant')
+
+  const { error } = await supabase.from('users').delete().eq('id', assistantUserId)
+  if (error) throw error
+
+  return { success: true }
 }

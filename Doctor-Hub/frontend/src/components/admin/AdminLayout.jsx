@@ -1,17 +1,20 @@
 import { Outlet } from 'react-router-dom'
-import { LayoutDashboard, Stethoscope, Users, Calendar, CreditCard, Shield, UserCog } from 'lucide-react'
+import { LayoutDashboard, Stethoscope, Users, Calendar, CreditCard, Shield, UserCog, UserPlus, ClipboardCheck } from 'lucide-react'
+import NotificationBell from './NotificationBell'
 import { useAuth } from '../../context/AuthContext'
 import DashboardShell, { LogoutButton } from '../layout/DashboardShell'
 
 const BASE_NAV = [
   { to: '/admin/dashboard', label: 'Analytics', icon: LayoutDashboard, end: true },
   { to: '/admin/doctors', label: 'Doctors', icon: Stethoscope },
+  { to: '/admin/assistants', label: 'Assistants', icon: UserPlus },
   { to: '/admin/patients', label: 'Patients', icon: Users },
   { to: '/admin/appointments', label: 'Appointments', icon: Calendar },
   { to: '/admin/payments', label: 'Payments', icon: CreditCard },
 ]
 
 const SUPER_NAV = [
+  { to: '/admin/approvals', label: 'Admin Approvals', icon: ClipboardCheck },
   { to: '/admin/admins', label: 'Admins', icon: Shield },
   { to: '/admin/users', label: 'All Users', icon: UserCog },
 ]
@@ -28,6 +31,7 @@ const AdminLayout = () => {
       navItems={navItems}
       footer={
         <div>
+          <NotificationBell />
           <div className="px-3 mb-2">
             <p className="text-sm font-semibold text-slate-800 truncate">{user?.name}</p>
             <p className="text-xs text-slate-500 capitalize truncate">{user?.role?.replace('_', ' ')}</p>

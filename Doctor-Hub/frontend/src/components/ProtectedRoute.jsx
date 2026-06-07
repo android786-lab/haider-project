@@ -2,13 +2,15 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import PageLoader from './shared/PageLoader'
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children, allowedRoles, loginPath = '/login' }) => {
   const { token, user, loading } = useAuth()
 
-  if (loading) return <PageLoader message="Checking authentication..." />
+  if (!token) {
+    return <Navigate to={loginPath} replace />
+  }
 
-  if (!token || !user) {
-    return <Navigate to="/login" replace />
+  if (loading || !user) {
+    return <PageLoader message="Checking authentication..." />
   }
 
   const role = user.role === 'super_admin' ? 'superadmin' : user.role

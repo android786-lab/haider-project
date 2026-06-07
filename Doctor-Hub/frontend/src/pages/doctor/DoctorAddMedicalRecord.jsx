@@ -28,7 +28,11 @@ const DoctorAddMedicalRecord = () => {
           if (!['confirmed', 'completed'].includes(data.appointment.status)) {
             setError('Only confirmed or completed appointments can have medical records.')
           }
-          setAppointment(data.appointment)
+          const raw = data.appointment || data.data
+          setAppointment({
+            ...raw,
+            patientId: raw.patientId || raw.patient_id,
+          })
         }
       })
       .catch(console.error)
@@ -41,13 +45,14 @@ const DoctorAddMedicalRecord = () => {
     setError('')
     try {
       const { data } = await api.post('/api/doctor/medical-history', {
-        patientId: appointment.patientId,
-        appointmentId: parseInt(appointmentId, 10),
+        patientId: appointment.patientId || appointment.patient_id,
+        appointmentId,
         ...form,
       })
       if (data.success) {
         showSuccess('Medical record saved successfully.')
-        navigate(`/doctor/appointments/${appointmentId}/prescription?historyId=${data.medicalHistory.id}`)
+        const historyId = data.data?.id || data.medicalHistory?.id
+        navigate(`/doctor/appointments/${appointmentId}/prescription?historyId=${historyId}`)
       } else {
         setError(data.message)
       }

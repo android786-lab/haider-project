@@ -6,6 +6,7 @@ import {
   updateAppointmentStatus,
 } from '../services/appointmentService.js'
 import { triggerAppointmentNotification } from '../services/whatsappService.js'
+import { listLiveAppointmentsForUser } from '../services/appointmentLiveService.js'
 
 export async function bookAppointment(req, res) {
   try {
@@ -32,9 +33,24 @@ export async function bookAppointment(req, res) {
       success: true,
       message: 'Appointment booked. Upload payment proof to continue.',
       data,
+      appointment: data,
     })
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message })
+  }
+}
+
+export async function getLiveAppointments(req, res) {
+  try {
+    const { userId, role } = req.auth
+    if (!['patient', 'doctor'].includes(role)) {
+      return res.status(403).json({ success: false, message: 'Forbidden' })
+    }
+    const data = await listLiveAppointmentsForUser({ userId, role })
+    const live = data.filter((a) => a.isLive)
+    return res.json({ success: true, data, appointments: data, live })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
   }
 }
 

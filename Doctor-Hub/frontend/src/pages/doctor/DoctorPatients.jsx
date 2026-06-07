@@ -6,6 +6,7 @@ import PageHeader from '../../components/shared/PageHeader'
 import EmptyState from '../../components/shared/EmptyState'
 import { Card, CardContent } from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
+import { mapDoctorPatient, normalizeDoctorPatients } from '../../lib/doctorPortalMappers'
 
 const DoctorPatients = () => {
   const [patients, setPatients] = useState([])
@@ -13,7 +14,11 @@ const DoctorPatients = () => {
 
   useEffect(() => {
     api.get('/api/doctor/patients')
-      .then(({ data }) => { if (data.success) setPatients(data.patients) })
+      .then(({ data }) => {
+        if (data.success) {
+          setPatients(normalizeDoctorPatients(data).map(mapDoctorPatient))
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -52,8 +57,8 @@ const DoctorPatients = () => {
                   </Badge>
                 </div>
                 <div className="mt-3 flex gap-4 text-sm text-slate-600">
-                  {p.age && <span>Age: {p.age}</span>}
-                  {p.bloodGroup && <span>Blood: {p.bloodGroup}</span>}
+                  {p.phone && <span>{p.phone}</span>}
+                  {p.gender && <span>{p.gender}</span>}
                 </div>
                 <p className="text-xs text-slate-400 mt-2">Last visit: {p.lastVisit}</p>
                 <Link to={`/doctor/patients/${p.patientId}/history`}

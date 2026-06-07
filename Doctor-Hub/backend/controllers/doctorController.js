@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
 import { requireSupabase } from '../config/supabaseClient.js'
 import { fetchDoctors } from '../services/doctorService.js'
+import { listAppointmentsForUser } from '../services/appointmentService.js'
 
 // Doctor login
 const loginDoctor = async (req, res) => {
@@ -29,15 +30,12 @@ const loginDoctor = async (req, res) => {
     }
 }
 
-// Get doctor's appointments
+// Get doctor's appointments (enriched with patient/doctor snapshots)
 const appointmentsDoctor = async (req, res) => {
     try {
-        const supabase = requireSupabase()
         const docId = req.user.id
-        const { data: appointments, error } = await supabase
-            .from('appointments').select('*').eq('doctor_id', docId)
-        if (error) throw error
-        res.json({ success: true, appointments })
+        const appointments = await listAppointmentsForUser({ userId: docId, role: 'doctor' })
+        res.json({ success: true, appointments, data: appointments })
     } catch (error) {
         res.status(500).json({ success: false, message: error.message })
     }

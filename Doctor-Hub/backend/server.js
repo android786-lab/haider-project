@@ -58,6 +58,7 @@ import messagesRouter from './routes/messagesRoute.js'
 import aiRouter from './routes/aiRoute.js'
 import consultationsRouter from './routes/consultationsRoute.js'
 import notificationsRouter from './routes/notificationsRoute.js'
+import platformNotificationsRouter from './routes/platformNotificationsRoute.js'
 import patientRouter from './routes/patientRoute.js'
 import assistantRouter from './routes/assistantRoute.js'
 import { adminNewRouter, superAdminRouter } from './routes/adminNewRoute.js'
@@ -151,6 +152,7 @@ app.use('/api/messages', messagesRouter)
 app.use('/api/ai', aiRateLimiter, aiRouter)
 app.use('/api/consultations', consultationsRouter)
 app.use('/api/notifications', notificationRateLimiter, notificationsRouter)
+app.use('/api/inbox', platformNotificationsRouter)
 app.use('/api/patient', patientRouter)
 app.use('/api/assistant', assistantRouter)
 app.use('/api/admin', adminNewRouter)
@@ -171,7 +173,17 @@ app.use(errorHandler)
 
 if (process.env.VERCEL !== '1') {
 
-  app.listen(port, () => console.log(`Server started on PORT:${port}`))
+  app.listen(port, () => {
+    console.log(`Server started on PORT:${port}`)
+    import('./services/appointmentLiveService.js')
+      .then(({ processDueAppointmentNotifications }) => {
+        processDueAppointmentNotifications().catch(() => {})
+        setInterval(() => {
+          processDueAppointmentNotifications().catch(() => {})
+        }, 60 * 1000)
+      })
+      .catch(() => {})
+  })
 
 }
 

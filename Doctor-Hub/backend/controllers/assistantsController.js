@@ -2,6 +2,7 @@ import {
   listAssistants,
   createAssistant,
   updateAssistant,
+  deleteAssistant,
 } from '../services/assistantService.js'
 
 export async function getAssistants(req, res) {
@@ -34,6 +35,15 @@ export async function postAssistant(req, res) {
       message: 'Assistant account created',
       data,
     })
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message })
+  }
+}
+
+export async function removeAssistant(req, res) {
+  try {
+    await deleteAssistant(req.params.id)
+    return res.json({ success: true, message: 'Assistant deleted' })
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message })
   }

@@ -5,6 +5,7 @@ import PageHeader from '../../components/shared/PageHeader'
 import StatusBadge from '../../components/shared/StatusBadge'
 import EmptyState from '../../components/shared/EmptyState'
 import { Card, CardContent } from '../../components/ui/Card'
+import { mapAssistantAppointment, normalizeList } from '../../lib/assistantMappers'
 
 const AssistantBookings = () => {
   const [bookings, setBookings] = useState([])
@@ -12,7 +13,11 @@ const AssistantBookings = () => {
 
   useEffect(() => {
     api.get('/api/assistant/bookings')
-      .then(({ data }) => { if (data.success) setBookings(data.bookings) })
+      .then(({ data }) => {
+        if (data.success) {
+          setBookings(normalizeList(data, 'bookings', 'data', 'appointments').map(mapAssistantAppointment))
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -48,7 +53,9 @@ const AssistantBookings = () => {
                     <p className="text-sm text-slate-500 mt-1">{b.date} at {b.timeSlot}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-slate-400">Booked {new Date(b.createdAt).toLocaleDateString()}</p>
+                    <p className="text-xs text-slate-400">
+                      Booked {b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—'}
+                    </p>
                     {b.amount && <p className="text-sm font-medium text-slate-900 mt-1">${b.amount}</p>}
                   </div>
                 </div>

@@ -22,6 +22,9 @@ import { authenticate, authorizeRoles } from '../middlewares/auth.js'
 import { validate } from '../middlewares/validate.js'
 import {
   listDoctorsAdmin,
+  createDoctor,
+  updateDoctor,
+  deleteDoctor,
   verifyDoctor,
   unverifyDoctor,
   listPatients,
@@ -34,6 +37,11 @@ import {
   demoteAdmin,
   deleteUser,
 } from '../controllers/adminNewController.js'
+import {
+  listPendingAdmins,
+  approveAdmin,
+  rejectAdmin,
+} from '../controllers/adminApprovalController.js'
 
 // ── Admin router ───────────────────────────────────────────
 const adminNewRouter = express.Router()
@@ -41,6 +49,38 @@ adminNewRouter.use(authenticate)
 adminNewRouter.use(authorizeRoles('admin', 'super_admin'))
 
 adminNewRouter.get('/doctors', listDoctorsAdmin)
+
+adminNewRouter.post(
+  '/doctors',
+  [
+    body('name').trim().notEmpty(),
+    body('email').isEmail(),
+    body('password').isLength({ min: 8 }),
+    body('speciality').optional().isString(),
+    body('degree').optional().isString(),
+    body('experience').optional().isString(),
+    body('about').optional().isString(),
+    body('fees').optional().isNumeric(),
+    body('treatment').optional().isIn(['allopathic', 'homeopathic', 'herbal']),
+    body('phone').optional().isString(),
+  ],
+  validate,
+  createDoctor
+)
+
+adminNewRouter.put(
+  '/doctors/:id',
+  [param('id').isUUID()],
+  validate,
+  updateDoctor
+)
+
+adminNewRouter.delete(
+  '/doctors/:id',
+  [param('id').isUUID()],
+  validate,
+  deleteDoctor
+)
 
 adminNewRouter.put(
   '/doctors/:id/verify',
@@ -91,6 +131,22 @@ superAdminRouter.use(authorizeRoles('super_admin'))
 
 superAdminRouter.get('/admins', listAdmins)
 superAdminRouter.get('/users', listUsers)
+
+superAdminRouter.get('/admin-requests', listPendingAdmins)
+
+superAdminRouter.put(
+  '/admin-requests/:id/approve',
+  [param('id').isUUID()],
+  validate,
+  approveAdmin
+)
+
+superAdminRouter.put(
+  '/admin-requests/:id/reject',
+  [param('id').isUUID(), body('reason').optional().isString()],
+  validate,
+  rejectAdmin
+)
 
 superAdminRouter.post(
   '/admins',

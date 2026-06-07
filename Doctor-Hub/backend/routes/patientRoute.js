@@ -13,6 +13,8 @@ import { authenticate, authorizeRoles } from '../middlewares/auth.js'
 import { requireSupabase } from '../config/supabaseClient.js'
 import { listAppointmentsForUser } from '../services/appointmentService.js'
 import { listHistory } from '../services/historyService.js'
+import { listPrescriptions } from '../services/prescriptionService.js'
+import { enrichHistoryRows, enrichPrescriptionRows } from '../services/patientRecordsService.js'
 
 const patientRouter = express.Router()
 
@@ -35,8 +37,9 @@ patientRouter.get('/appointments', async (req, res) => {
 patientRouter.get('/history', async (req, res) => {
   try {
     const { userId } = req.auth
-    const data = await listHistory({ userId, role: 'patient' })
-    return res.json({ success: true, data })
+    const rows = await listHistory({ userId, role: 'patient' })
+    const data = await enrichHistoryRows(rows)
+    return res.json({ success: true, data, history: data })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }
@@ -45,15 +48,10 @@ patientRouter.get('/history', async (req, res) => {
 // GET /api/patient/prescriptions
 patientRouter.get('/prescriptions', async (req, res) => {
   try {
-    const supabase = requireSupabase()
     const { userId } = req.auth
-    const { data, error } = await supabase
-      .from('prescriptions')
-      .select('*')
-      .eq('patient_id', userId)
-      .order('created_at', { ascending: false })
-    if (error) throw error
-    return res.json({ success: true, data: data || [] })
+    const rows = await listPrescriptions({ userId, role: 'patient' })
+    const data = await enrichPrescriptionRows(rows)
+    return res.json({ success: true, data, prescriptions: data })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }

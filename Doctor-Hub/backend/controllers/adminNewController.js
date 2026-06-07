@@ -2,27 +2,66 @@
  * adminNewController.js
  * New admin + superadmin API handlers using JWT auth (not legacy env-based).
  */
+import bcrypt from 'bcrypt'
+import validator from 'validator'
 import { requireSupabase } from '../config/supabaseClient.js'
 import { fetchDoctors } from '../services/doctorService.js'
 import { listAppointmentsForUser } from '../services/appointmentService.js'
+import { formatTimeFromDb } from '../utils/slotUtils.js'
+
+const DEFAULT_IMAGE =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAYAAAA+VemSAAAACXBIWXMAABCcAAAQnAEmzTo0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAADASURBVHgB7cExAQAAAMKg9U9tCy+gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBuAABHgAAAABJRU5ErkJggg=='
+
+function mapDoctorForAdmin(d, verifyMap = {}) {
+  const verified = verifyMap[d.id] ?? d.available ?? false
+  return {
+    ...d,
+    is_verified: verified,
+    isVerified: verified,
+    specialization: d.speciality || '',
+    treatmentType: d.treatment || 'allopathic',
+    fee: d.fees ?? 0,
+  }
+}
 
 // ── Admin: Doctors ─────────────────────────────────────────
 
 export async function listDoctorsAdmin(req, res) {
   try {
-    const doctors = await fetchDoctors({})
-    // Attach is_verified from doctors table
     const supabase = requireSupabase()
+    const doctors = await fetchDoctors({})
+    const { data: doctorUsers, error: usersErr } = await supabase
+      .from('users')
+      .select('id, name, email, is_active')
+      .eq('role', 'doctor')
+      .order('name')
+
+    if (usersErr) throw usersErr
+
     const { data: docRows } = await supabase
       .from('doctors')
       .select('user_id, available')
     const verifyMap = {}
     for (const r of docRows || []) verifyMap[r.user_id] = r.available
 
-    const result = doctors.map((d) => ({
-      ...d,
-      is_verified: verifyMap[d.id] !== undefined ? verifyMap[d.id] : true,
-    }))
+    const profileById = new Map(doctors.map((d) => [d.id, mapDoctorForAdmin(d, verifyMap)]))
+
+    const result = (doctorUsers || []).map((user) => {
+      const profile = profileById.get(user.id)
+      if (profile) return profile
+      return {
+        id: user.id,
+        user_id: user.id,
+        name: user.name,
+        email: user.email,
+        is_active: user.is_active,
+        speciality: 'General Physician',
+        specialization: 'General Physician',
+        is_verified: false,
+        isVerified: false,
+      }
+    })
+
     return res.json({ success: true, data: result, doctors: result })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
@@ -59,6 +98,174 @@ export async function unverifyDoctor(req, res) {
   }
 }
 
+export async function createDoctor(req, res) {
+  try {
+    const supabase = requireSupabase()
+    const {
+      name,
+      email,
+      password,
+      phone,
+      speciality,
+      degree,
+      experience,
+      about,
+      fees,
+      treatment = 'allopathic',
+      diseases = [],
+    } = req.body
+
+    if (!name?.trim() || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Name, email, and password are required' })
+    }
+    if (!validator.isEmail(email)) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid email' })
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' })
+    }
+
+    const { data: existing } = await supabase.from('users').select('id').eq('email', email).maybeSingle()
+    if (existing) return res.status(400).json({ success: false, message: 'Email already registered' })
+
+    const salt = await bcrypt.genSalt(10)
+    const passwordHash = await bcrypt.hash(password, salt)
+
+    const { data: user, error: userErr } = await supabase
+      .from('users')
+      .insert({
+        name: name.trim(),
+        email,
+        password_hash: passwordHash,
+        role: 'doctor',
+        image: DEFAULT_IMAGE,
+        phone: phone || '',
+        address: { line1: '', line2: '' },
+        gender: '',
+        dob: '',
+      })
+      .select('id, name, email')
+      .single()
+
+    if (userErr) throw userErr
+
+    const { error: docErr } = await supabase.from('doctors').insert({
+      user_id: user.id,
+      speciality: speciality || 'General Physician',
+      degree: degree || 'MBBS',
+      experience: experience || '',
+      about: about || '',
+      fees: Number(fees) || 0,
+      treatment,
+      diseases: Array.isArray(diseases) ? diseases : [],
+      address: { line1: '', line2: '' },
+      available: true,
+    })
+
+    if (docErr) {
+      await supabase.from('users').delete().eq('id', user.id)
+      throw docErr
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Doctor account created. Share these credentials with the doctor.',
+      doctor: { id: user.id, name: user.name, email: user.email },
+    })
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message })
+  }
+}
+
+export async function updateDoctor(req, res) {
+  try {
+    const supabase = requireSupabase()
+    const { id } = req.params
+    const {
+      name,
+      email,
+      password,
+      phone,
+      speciality,
+      degree,
+      experience,
+      about,
+      fees,
+      treatment,
+      diseases,
+      is_active,
+    } = req.body
+
+    const { data: user, error: fetchErr } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (fetchErr || !user) return res.status(404).json({ success: false, message: 'Doctor not found' })
+    if (user.role !== 'doctor') return res.status(400).json({ success: false, message: 'User is not a doctor' })
+
+    const userPatch = {}
+    if (name !== undefined) userPatch.name = name.trim()
+    if (email !== undefined) userPatch.email = email
+    if (phone !== undefined) userPatch.phone = phone
+    if (is_active !== undefined) userPatch.is_active = is_active
+    if (password) {
+      if (password.length < 8) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' })
+      }
+      const salt = await bcrypt.genSalt(10)
+      userPatch.password_hash = await bcrypt.hash(password, salt)
+    }
+
+    if (Object.keys(userPatch).length > 0) {
+      const { error: userErr } = await supabase.from('users').update(userPatch).eq('id', id)
+      if (userErr) throw userErr
+    }
+
+    const docPatch = {}
+    if (speciality !== undefined) docPatch.speciality = speciality
+    if (degree !== undefined) docPatch.degree = degree
+    if (experience !== undefined) docPatch.experience = experience
+    if (about !== undefined) docPatch.about = about
+    if (fees !== undefined) docPatch.fees = Number(fees)
+    if (treatment !== undefined) docPatch.treatment = treatment
+    if (diseases !== undefined) docPatch.diseases = diseases
+
+    if (Object.keys(docPatch).length > 0) {
+      const { error: docErr } = await supabase.from('doctors').update(docPatch).eq('user_id', id)
+      if (docErr) throw docErr
+    }
+
+    return res.json({ success: true, message: 'Doctor updated' })
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message })
+  }
+}
+
+export async function deleteDoctor(req, res) {
+  try {
+    const supabase = requireSupabase()
+    const { id } = req.params
+
+    const { data: user, error: fetchErr } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (fetchErr || !user) return res.status(404).json({ success: false, message: 'Doctor not found' })
+    if (user.role !== 'doctor') return res.status(400).json({ success: false, message: 'User is not a doctor' })
+
+    const { error } = await supabase.from('users').delete().eq('id', id)
+    if (error) throw error
+
+    return res.json({ success: true, message: 'Doctor deleted' })
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message })
+  }
+}
+
 // ── Admin: Patients ────────────────────────────────────────
 
 export async function listPatients(req, res) {
@@ -70,7 +277,16 @@ export async function listPatients(req, res) {
       .eq('role', 'patient')
       .order('created_at', { ascending: false })
     if (error) throw error
-    return res.json({ success: true, data: data || [] })
+    const patients = (data || []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      email: p.email,
+      phone: p.phone,
+      gender: p.gender,
+      joinedAt: p.created_at,
+      created_at: p.created_at,
+    }))
+    return res.json({ success: true, data: patients, patients })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }
@@ -117,6 +333,43 @@ export async function listAppointmentsAdmin(req, res) {
 
 // ── Admin: Payments ────────────────────────────────────────
 
+function formatAppointmentDate(slotDate) {
+  if (!slotDate) return '—'
+  const parsed = new Date(slotDate)
+  if (Number.isNaN(parsed.getTime())) return String(slotDate)
+  return parsed.toLocaleDateString('en-PK', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function mapPaymentForAdmin(payment, appointment) {
+  const patient = appointment?.patient_snapshot || {}
+  const doctor = appointment?.doctor_snapshot || {}
+
+  return {
+    id: payment.id,
+    appointment_id: payment.appointment_id,
+    patient_id: payment.patient_id,
+    patientName: patient.name || '—',
+    patientEmail: patient.email || '',
+    doctorName: doctor.name || '—',
+    doctorSpeciality: doctor.speciality || '',
+    appointmentDate: formatAppointmentDate(appointment?.slot_date),
+    timeSlot: appointment?.slot_time ? formatTimeFromDb(appointment.slot_time) : '—',
+    amount: appointment?.amount ?? 0,
+    status: payment.status,
+    screenshot_url: payment.screenshot_url,
+    screenshotUrl: payment.screenshot_url,
+    created_at: payment.created_at,
+    submittedAt: payment.created_at,
+    verified_by: payment.verified_by,
+    verified_at: payment.verified_at,
+    rejection_reason: payment.rejection_reason,
+  }
+}
+
 export async function listPaymentsAdmin(req, res) {
   try {
     const supabase = requireSupabase()
@@ -129,9 +382,29 @@ export async function listPaymentsAdmin(req, res) {
 
     if (status) query = query.eq('status', status)
 
-    const { data, error } = await query
+    const { data: payments, error } = await query
     if (error) throw error
-    return res.json({ success: true, data: data || [] })
+
+    const appointmentIds = [...new Set((payments || []).map((p) => p.appointment_id).filter(Boolean))]
+    const appointmentMap = {}
+
+    if (appointmentIds.length) {
+      const { data: appointments, error: apptErr } = await supabase
+        .from('appointments')
+        .select('id, amount, slot_date, slot_time, patient_snapshot, doctor_snapshot')
+        .in('id', appointmentIds)
+
+      if (apptErr) throw apptErr
+      for (const appt of appointments || []) {
+        appointmentMap[appt.id] = appt
+      }
+    }
+
+    const mapped = (payments || []).map((payment) =>
+      mapPaymentForAdmin(payment, appointmentMap[payment.appointment_id])
+    )
+
+    return res.json({ success: true, data: mapped, payments: mapped })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }
@@ -196,8 +469,11 @@ export async function getAnalytics(req, res) {
       statusCounts[a.status] = (statusCounts[a.status] || 0) + 1
     }
 
-    const today = new Date().toISOString().slice(0, 10)
-    const todayAppointments = (recentAppointments || []).filter((a) => a.slot_date === today).length
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const todayAppointments = (recentAppointments || []).filter((a) => {
+      const slotDate = typeof a.slot_date === 'string' ? a.slot_date.split('T')[0] : ''
+      return slotDate === todayIso
+    }).length
     const treatmentTypes = Object.entries(treatmentCounts).map(([type, count]) => ({ type, count }))
 
     const analytics = {
@@ -225,8 +501,10 @@ export async function listAdmins(req, res) {
     const supabase = requireSupabase()
     const { data, error } = await supabase
       .from('users')
-      .select('id, name, email, role, is_active, created_at')
+      .select('id, name, email, role, is_active, approval_status, created_at')
       .in('role', ['admin', 'super_admin'])
+      .eq('is_active', true)
+      .neq('approval_status', 'pending')
       .order('created_at', { ascending: false })
     if (error) throw error
     const admins = (data || []).map((a) => ({

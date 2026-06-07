@@ -5,6 +5,7 @@ import api from '../../lib/api'
 import PageHeader from '../../components/shared/PageHeader'
 import EmptyState from '../../components/shared/EmptyState'
 import { Card, CardContent } from '../../components/ui/Card'
+import { mapDoctorPatient, normalizeDoctorPatients } from '../../lib/doctorPortalMappers'
 
 const DoctorPrescriptions = () => {
   const [patients, setPatients] = useState([])
@@ -12,7 +13,11 @@ const DoctorPrescriptions = () => {
 
   useEffect(() => {
     api.get('/api/doctor/patients')
-      .then(({ data }) => { if (data.success) setPatients(data.patients) })
+      .then(({ data }) => {
+        if (data.success) {
+          setPatients(normalizeDoctorPatients(data).map(mapDoctorPatient))
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -39,11 +44,12 @@ const DoctorPrescriptions = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {patients.map((p) => (
-            <Link key={p.patientId} to={`/doctor/patients/${p.patientId}/history`}>
+            <Link key={p.patientId} to={`/doctor/patients/${p.patientId}/history?from=prescriptions`}>
               <Card className="hover:shadow-elevated transition-shadow duration-300 h-full">
                 <CardContent className="pt-5">
                   <h3 className="font-semibold text-slate-900">{p.name}</h3>
                   <p className="text-sm text-slate-500">{p.email}</p>
+                  <p className="text-xs text-slate-400 mt-1">{p.totalVisits} visit{p.totalVisits !== 1 ? 's' : ''}</p>
                   <p className="text-sm text-primary-600 mt-3 font-medium inline-flex items-center gap-1">
                     View history & prescriptions <ArrowRight className="w-4 h-4" />
                   </p>

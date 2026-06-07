@@ -1,12 +1,17 @@
 import { requireSupabase } from '../config/supabaseClient.js'
+import { createNotification } from './notificationService.js'
+import { isAppointmentLive } from './appointmentLiveService.js'
+
+const CHAT_STATUSES = ['payment_submitted', 'verified', 'confirmed', 'completed']
 
 async function hasAppointmentRelationship(patientId, doctorId) {
   const supabase = requireSupabase()
   const { data, error } = await supabase
     .from('appointments')
-    .select('id')
+    .select('id, status')
     .eq('patient_id', patientId)
     .eq('doctor_id', doctorId)
+    .in('status', CHAT_STATUSES)
     .limit(1)
 
   if (error) throw error
@@ -60,7 +65,8 @@ export async function listThreads({ userId, role }) {
 
   let apptQuery = supabase
     .from('appointments')
-    .select('patient_id, doctor_id, patient_snapshot, doctor_snapshot')
+    .select('patient_id, doctor_id, patient_snapshot, doctor_snapshot, status, slot_date, slot_time')
+    .in('status', CHAT_STATUSES)
     .order('created_at', { ascending: false })
 
   if (role === 'patient') {
@@ -85,7 +91,13 @@ export async function listThreads({ userId, role }) {
         patient_image: appt.patient_snapshot?.image,
         doctor_name: appt.doctor_snapshot?.name || 'Doctor',
         doctor_image: appt.doctor_snapshot?.image,
+        is_live: isAppointmentLive(appt),
+        appointment_id: appt.id,
       })
+    } else if (isAppointmentLive(appt)) {
+      const existing = pairMap.get(key)
+      existing.is_live = true
+      existing.appointment_id = appt.id
     }
   }
 
@@ -174,5 +186,25 @@ export async function sendMessage({
     .single()
 
   if (error) throw error
+
+  const recipientId = role === 'patient' ? doctorId : patientId
+
+  try {
+    await createNotification({
+      userId: recipientId,
+      type: 'new_message',
+      title: 'New chat message',
+      message: `New message: ${text.slice(0, 120)}`,
+      metadata: {
+        patient_id: patientId,
+        doctor_id: doctorId,
+        appointment_id: appointmentId || null,
+        chat_path: role === 'patient' ? '/doctor/messages' : '/patient/messages',
+      },
+    })
+  } catch {
+    // notification failure should not block chat
+  }
+
   return mapMessageRow(data)
 }

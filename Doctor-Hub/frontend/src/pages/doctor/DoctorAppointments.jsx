@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Calendar, ArrowRight } from 'lucide-react'
+import { Calendar, ArrowRight, MessageCircle } from 'lucide-react'
 import api from '../../lib/api'
 import PageHeader from '../../components/shared/PageHeader'
 import StatusBadge from '../../components/shared/StatusBadge'
@@ -8,6 +8,11 @@ import DataTable from '../../components/shared/DataTable'
 import EmptyState from '../../components/shared/EmptyState'
 import { Card } from '../../components/ui/Card'
 import Select from '../../components/ui/Select'
+import Badge from '../../components/ui/Badge'
+import {
+  mapDoctorAppointment,
+  normalizeDoctorAppointments,
+} from '../../lib/doctorPortalMappers'
 
 const DoctorAppointments = () => {
   const [appointments, setAppointments] = useState([])
@@ -15,8 +20,20 @@ const DoctorAppointments = () => {
   const [filter, setFilter] = useState('all')
 
   useEffect(() => {
-    api.get('/api/doctor/appointments')
-      .then(({ data }) => { if (data.success) setAppointments(data.appointments) })
+    Promise.all([
+      api.get('/api/doctor/appointments'),
+      api.get('/api/appointments/live'),
+    ])
+      .then(([apptRes, liveRes]) => {
+        const liveIds = new Set((liveRes.data?.live || []).map((a) => a.id))
+        if (apptRes.data.success) {
+          setAppointments(
+            normalizeDoctorAppointments(apptRes.data).map((row) =>
+              mapDoctorAppointment(row, { isLive: liveIds.has(row.id) })
+            )
+          )
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -41,21 +58,43 @@ const DoctorAppointments = () => {
     {
       key: 'status',
       label: 'Status',
-      render: (appt) => <StatusBadge status={appt.status} />,
+      render: (appt) => (
+        <div className="flex items-center gap-2">
+          <StatusBadge status={appt.status} />
+          {appt.isLive && <Badge variant="success">Live</Badge>}
+        </div>
+      ),
     },
     {
       key: 'payment',
       label: 'Payment',
-      render: (appt) => <StatusBadge status={appt.paymentStatus} />,
+      render: (appt) => (
+        <div>
+          <StatusBadge status={appt.paymentStatus} />
+          {appt.feeLabel && <p className="text-xs text-slate-500 mt-0.5">{appt.feeLabel}</p>}
+        </div>
+      ),
     },
     {
       key: 'action',
       label: '',
       render: (appt) => (
-        <Link to={`/doctor/appointments/${appt.id}`}
-          className="text-primary-600 text-xs font-medium hover:underline inline-flex items-center gap-1">
-          View <ArrowRight className="w-3 h-3" />
-        </Link>
+        <div className="flex items-center gap-3">
+          {appt.chatEnabled && (
+            <Link
+              to={`/doctor/messages?patient=${appt.patient_id}`}
+              className="text-primary-600 text-xs font-medium hover:underline inline-flex items-center gap-1"
+            >
+              <MessageCircle className="w-3 h-3" /> Chat
+            </Link>
+          )}
+          <Link
+            to={`/doctor/appointments/${appt.id}`}
+            className="text-primary-600 text-xs font-medium hover:underline inline-flex items-center gap-1"
+          >
+            View <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
       ),
     },
   ]
@@ -69,6 +108,8 @@ const DoctorAppointments = () => {
           <Select value={filter} onChange={(e) => setFilter(e.target.value)} className="w-40">
             <option value="all">All</option>
             <option value="pending">Pending</option>
+            <option value="payment_pending">Payment Pending</option>
+            <option value="payment_submitted">Payment Submitted</option>
             <option value="confirmed">Confirmed</option>
             <option value="completed">Completed</option>
           </Select>

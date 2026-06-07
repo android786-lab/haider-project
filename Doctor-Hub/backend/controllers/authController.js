@@ -34,18 +34,13 @@ function formatUser(user) {
   }
 }
 
-const ALLOWED_REGISTER_ROLES = ['patient', 'doctor', 'assistant', 'admin', 'superadmin']
-
 export async function register(req, res) {
   try {
     const supabase = requireSupabase()
-    const { name, email, password, role: rawRole = 'patient', doctorId } = req.body
+    const { name, email, password } = req.body
 
-    if (!ALLOWED_REGISTER_ROLES.includes(rawRole)) {
-      return res.status(400).json({ success: false, message: 'Invalid role' })
-    }
-
-    const role = toDbRole(rawRole)
+    // Public registration: patients only. Doctors & assistants are created by admin.
+    const role = 'patient'
 
     const salt = await bcrypt.genSalt(10)
     const passwordHash = await bcrypt.hash(password, salt)
@@ -68,33 +63,8 @@ export async function register(req, res) {
 
     if (error) throw error
 
-    if (role === 'patient') {
-      const { error: patientErr } = await supabase.from('patients').insert({ user_id: user.id })
-      if (patientErr) throw patientErr
-    } else if (role === 'doctor') {
-      const { error: doctorErr } = await supabase.from('doctors').insert({
-        user_id: user.id,
-        speciality: '',
-        degree: '',
-        experience: '',
-        about: '',
-        fees: 0,
-        treatment: 'allopathic',
-        diseases: [],
-        address: { line1: '', line2: '' },
-        available: false,
-      })
-      if (doctorErr) throw doctorErr
-    } else if (role === 'assistant') {
-      if (!doctorId) {
-        return res.status(400).json({ success: false, message: 'doctorId is required for assistants' })
-      }
-      const { error: assistantErr } = await supabase.from('assistants').insert({
-        user_id: user.id,
-        doctor_id: doctorId,
-      })
-      if (assistantErr) throw assistantErr
-    }
+    const { error: patientErr } = await supabase.from('patients').insert({ user_id: user.id })
+    if (patientErr) throw patientErr
 
     const token = signToken({ userId: user.id, role: user.role })
     return res.json({ success: true, token, user: formatUser(user) })
@@ -110,15 +80,27 @@ export async function login(req, res) {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, email, name, role, password_hash, is_active')
+      .select('id, email, name, role, password_hash, is_active, approval_status')
       .eq('email', email)
       .single()
 
     if (error || !user) return res.status(401).json({ success: false, message: 'Invalid credentials' })
-    if (!user.is_active) return res.status(403).json({ success: false, message: 'Account disabled' })
 
     const isMatch = await bcrypt.compare(password, user.password_hash)
     if (!isMatch) return res.status(401).json({ success: false, message: 'Invalid credentials' })
+
+    if (user.role === 'admin' && user.approval_status === 'pending') {
+      return res.status(403).json({
+        success: false,
+        code: 'PENDING_APPROVAL',
+        message:
+          'Your admin account has not been approved yet. Your registration is pending Super Admin approval. You will be notified once approved.',
+      })
+    }
+
+    if (!user.is_active) {
+      return res.status(403).json({ success: false, message: 'Account disabled. Contact Super Admin.' })
+    }
 
     const token = signToken({ userId: user.id, role: user.role })
     const { data: profile } = await supabase

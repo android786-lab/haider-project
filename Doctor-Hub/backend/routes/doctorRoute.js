@@ -69,7 +69,8 @@ doctorRouter.get('/clinics', authenticate, authorizeRoles('doctor'), async (req,
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    return res.json({ success: true, data: data || [] })
+    const clinics = data || []
+    return res.json({ success: true, data: clinics, clinics })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }
@@ -81,10 +82,20 @@ doctorRouter.post(
   authenticate,
   authorizeRoles('doctor'),
   [
-    body('name').trim().notEmpty().withMessage('Clinic name is required'),
-    body('address').optional().isObject(),
+    body('name').optional().trim().isString(),
+    body('clinicName').optional().trim().isString(),
+    body('address').optional(),
+    body('city').optional().isString(),
     body('phone').optional().isString(),
     body('schedule').optional().isObject(),
+    body('availableDays').optional().isArray(),
+    body('startTime').optional().isString(),
+    body('endTime').optional().isString(),
+    body().custom((_, { req }) => {
+      const name = (req.body.name || req.body.clinicName || '').trim()
+      if (!name) throw new Error('Clinic name is required')
+      return true
+    }),
   ],
   validate,
   async (req, res) => {
@@ -92,16 +103,36 @@ doctorRouter.post(
       const { requireSupabase } = await import('../config/supabaseClient.js')
       const supabase = requireSupabase()
       const doctorId = req.auth.userId
-      const { name, address, phone, schedule } = req.body
+      const {
+        name,
+        clinicName,
+        address,
+        city,
+        phone,
+        schedule,
+        availableDays,
+        startTime,
+        endTime,
+      } = req.body
+
+      const clinicNameValue = (name || clinicName || '').trim()
+      const addressObj = typeof address === 'object'
+        ? address
+        : { line1: address || '', line2: city || '' }
+      const scheduleObj = schedule || {
+        days: availableDays || [],
+        start: startTime || '09:00',
+        end: endTime || '17:00',
+      }
 
       const { data, error } = await supabase
         .from('clinics')
         .insert({
           doctor_id: doctorId,
-          name,
-          address: address || { line1: '', line2: '' },
+          name: clinicNameValue,
+          address: addressObj,
           phone: phone || '',
-          schedule: schedule || {},
+          schedule: scheduleObj,
           is_active: true,
         })
         .select()
@@ -141,17 +172,52 @@ doctorRouter.get('/patients', authDoctor, getDoctorPatients)
 doctorRouter.get('/appointments/:id', authDoctor, async (req, res) => {
   try {
     const { requireSupabase } = await import('../config/supabaseClient.js')
+    const { getAppointmentById } = await import('../services/appointmentService.js')
     const supabase = requireSupabase()
     const docId = req.user.id
-    const { data, error } = await supabase
-      .from('appointments')
+    const row = await getAppointmentById(req.params.id)
+    if (row.doctor_id !== docId) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' })
+    }
+
+    const patient = row.user_data || row.patient_snapshot || {}
+    const { data: historyRows } = await supabase
+      .from('medical_history')
       .select('*')
-      .eq('id', req.params.id)
-      .eq('doctor_id', docId)
-      .maybeSingle()
-    if (error) throw error
-    if (!data) return res.status(404).json({ success: false, message: 'Appointment not found' })
-    return res.json({ success: true, appointment: data })
+      .eq('appointment_id', row.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    const history = historyRows?.[0] || null
+    let medicalHistory = null
+    if (history) {
+      const { data: rxRows } = await supabase
+        .from('prescriptions')
+        .select('*')
+        .eq('appointment_id', row.id)
+        .limit(1)
+      medicalHistory = {
+        id: history.id,
+        diagnosis: history.title,
+        symptoms: '',
+        notes: history.details || '',
+        hasPrescription: (rxRows || []).length > 0,
+      }
+    }
+
+    const appointment = {
+      ...row,
+      patientId: row.patient_id,
+      patientName: patient.name || 'Unknown Patient',
+      patientEmail: patient.email || '',
+      date: row.slot_date_iso || row.slot_date,
+      time: row.slot_time,
+      timeSlot: row.slot_time,
+      paymentStatus: ['verified', 'confirmed', 'completed'].includes(row.status) ? 'verified' : row.status,
+      medicalHistory,
+    }
+
+    return res.json({ success: true, appointment, data: appointment })
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message })
   }

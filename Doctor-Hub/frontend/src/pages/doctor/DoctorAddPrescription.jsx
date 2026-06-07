@@ -34,7 +34,15 @@ const DoctorAddPrescription = () => {
       return
     }
     api.get(`/api/doctor/appointments/${appointmentId}`)
-      .then(({ data }) => { if (data.success) setAppointment(data.appointment) })
+      .then(({ data }) => {
+        if (data.success) {
+          const raw = data.appointment || data.data
+          setAppointment({
+            ...raw,
+            patientId: raw.patientId || raw.patient_id,
+          })
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [appointmentId, historyId])
@@ -62,8 +70,8 @@ const DoctorAddPrescription = () => {
     try {
       const { data } = await api.post('/api/doctor/prescription', {
         patientId: appointment.patientId,
-        appointmentId: parseInt(appointmentId, 10),
-        medicalHistoryId: parseInt(historyId, 10),
+        appointmentId,
+        medicalHistoryId: historyId,
         medicines: validMeds,
         instructions,
       })

@@ -33,6 +33,7 @@ Doctor-Hub/
    - `backend/supabase_whatsapp.sql`
    - `backend/supabase_seed.sql` (optional demo data)
    - `backend/supabase_superadmin.sql` (optional super admin)
+   - `backend/supabase_admin_approvals.sql` (admin approval + notifications)
 
 ### 2. Environment Variables
 

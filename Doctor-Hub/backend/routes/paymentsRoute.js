@@ -17,7 +17,10 @@ paymentsRouter.post(
   authenticate,
   authorizeRoles('patient'),
   paymentUpload.single('screenshot'),   // strict jpg/png only
-  [body('appointment_id').isUUID()],
+  [
+    body('appointment_id').optional({ checkFalsy: true }).isUUID(),
+    body('appointmentId').optional({ checkFalsy: true }).isUUID(),
+  ],
   validate,
   createPayment
 )

@@ -4,6 +4,7 @@ import { authenticate, authorizeRoles } from '../middlewares/auth.js'
 import { validate } from '../middlewares/validate.js'
 import {
   bookAppointment,
+  getLiveAppointments,
   listAppointments,
   getAppointment,
   patchAppointmentStatus,
@@ -21,10 +22,16 @@ appointmentsRouter.post(
     body('doctor_id').isUUID(),
     body('slot_date').notEmpty(),
     body('slot_time').notEmpty(),
-    body('clinic_id').optional().isUUID(),
+    body('clinic_id').optional({ nullable: true }).isUUID(),
   ],
   validate,
   bookAppointment
+)
+
+appointmentsRouter.get(
+  '/live',
+  authorizeRoles('patient', 'doctor'),
+  getLiveAppointments
 )
 
 appointmentsRouter.get(

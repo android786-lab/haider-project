@@ -11,7 +11,19 @@ const AdminPatients = () => {
 
   useEffect(() => {
     api.get('/api/admin/patients')
-      .then(({ data }) => { if (data.success) setPatients(data.patients) })
+      .then(({ data }) => {
+        if (data.success) {
+          const rows = data.patients || data.data || []
+          setPatients(rows.map((p) => ({
+            id: p.id,
+            name: p.name,
+            email: p.email,
+            phone: p.phone,
+            gender: p.gender,
+            joinedAt: p.joinedAt || p.created_at,
+          })))
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -38,9 +50,9 @@ const AdminPatients = () => {
               <CardContent className="pt-5">
                 <h3 className="font-semibold text-slate-900">{p.name || 'Unlinked patient'}</h3>
                 <p className="text-sm text-slate-500">{p.email || 'No email'}</p>
-                <div className="mt-3 flex gap-4 text-sm text-slate-600">
-                  {p.age && <span>Age: {p.age}</span>}
-                  {p.bloodGroup && <span>Blood: {p.bloodGroup}</span>}
+                <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-600">
+                  {p.phone && <span>{p.phone}</span>}
+                  {p.gender && <span className="capitalize">{p.gender}</span>}
                 </div>
                 {p.joinedAt && (
                   <p className="text-xs text-slate-400 mt-2">Joined {new Date(p.joinedAt).toLocaleDateString()}</p>

@@ -5,6 +5,7 @@ import api from '../../lib/api'
 import StatusBadge from '../../components/shared/StatusBadge'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
+import { mapDoctorAppointment } from '../../lib/doctorPortalMappers'
 
 const DoctorAppointmentDetail = () => {
   const { appointmentId } = useParams()
@@ -13,7 +14,17 @@ const DoctorAppointmentDetail = () => {
 
   useEffect(() => {
     api.get(`/api/doctor/appointments/${appointmentId}`)
-      .then(({ data }) => { if (data.success) setAppointment(data.appointment) })
+      .then(({ data }) => {
+        if (data.success) {
+          const raw = data.appointment || data.data
+          const mapped = mapDoctorAppointment(raw)
+          setAppointment({
+            ...mapped,
+            patientId: raw.patientId || raw.patient_id,
+            medicalHistory: raw.medicalHistory,
+          })
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [appointmentId])

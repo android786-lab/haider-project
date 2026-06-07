@@ -7,6 +7,7 @@ import DataTable from '../../components/shared/DataTable'
 import EmptyState from '../../components/shared/EmptyState'
 import { Card } from '../../components/ui/Card'
 import Select from '../../components/ui/Select'
+import { mapAssistantAppointment, normalizeList } from '../../lib/assistantMappers'
 
 const AssistantAppointments = () => {
   const [appointments, setAppointments] = useState([])
@@ -15,14 +16,21 @@ const AssistantAppointments = () => {
 
   useEffect(() => {
     api.get('/api/assistant/appointments')
-      .then(({ data }) => { if (data.success) setAppointments(data.appointments) })
+      .then(({ data }) => {
+        if (data.success) {
+          setAppointments(normalizeList(data, 'appointments', 'data').map(mapAssistantAppointment))
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
 
   const filtered = filter === 'all'
     ? appointments
-    : appointments.filter((a) => a.status === filter)
+    : appointments.filter((a) => {
+        if (filter === 'pending') return ['payment_pending', 'payment_submitted', 'pending'].includes(a.status)
+        return a.status === filter
+      })
 
   const columns = [
     {

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import Label from '../../components/ui/Label'
+import { mapDoctorClinic, normalizeDoctorClinics } from '../../lib/doctorPortalMappers'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -26,8 +27,13 @@ const DoctorClinics = () => {
   })
 
   const fetchClinics = () => {
+    setLoading(true)
     api.get('/api/doctor/clinics')
-      .then(({ data }) => { if (data.success) setClinics(data.clinics) })
+      .then(({ data }) => {
+        if (data.success) {
+          setClinics(normalizeDoctorClinics(data).map(mapDoctorClinic))
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }

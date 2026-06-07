@@ -17,6 +17,17 @@ import { requireSupabase } from '../config/supabaseClient.js'
 
 const doctorMedicalRouter = express.Router()
 
+function parseMedicalDetails(details) {
+  const result = { symptoms: '', diagnosis: '', notes: '' }
+  if (!details) return result
+  for (const line of String(details).split('\n')) {
+    if (line.startsWith('Symptoms: ')) result.symptoms = line.slice(10)
+    else if (line.startsWith('Diagnosis: ')) result.diagnosis = line.slice(11)
+    else if (line.startsWith('Notes: ')) result.notes = line.slice(7)
+  }
+  return result
+}
+
 doctorMedicalRouter.use(authenticate)
 doctorMedicalRouter.use(authorizeRoles('doctor'))
 
@@ -144,33 +155,101 @@ doctorMedicalRouter.get(
       const doctorId = req.auth.userId
       const { patientId } = req.params
 
-      // Verify doctor has had an appointment with this patient
-      const { data: appts } = await supabase
+      const { data: latestAppt, error: apptErr } = await supabase
         .from('appointments')
-        .select('id')
+        .select('id, status, slot_date, slot_time, patient_snapshot')
         .eq('doctor_id', doctorId)
         .eq('patient_id', patientId)
+        .order('created_at', { ascending: false })
         .limit(1)
+        .maybeSingle()
 
-      if (!appts?.length) {
+      if (apptErr) throw apptErr
+      if (!latestAppt) {
         return res.status(403).json({ success: false, message: 'No appointment found with this patient' })
+      }
+
+      const snap = latestAppt.patient_snapshot || {}
+      const patient = {
+        patient_id: patientId,
+        name: snap.name || 'Unknown Patient',
+        email: snap.email || '',
+        phone: snap.phone || '',
+        gender: snap.gender || '',
+        image: snap.image || '',
       }
 
       const { data, error } = await supabase
         .from('medical_history')
         .select('*')
         .eq('patient_id', patientId)
+        .or(`doctor_id.eq.${doctorId},doctor_id.is.null`)
         .order('created_at', { ascending: false })
 
       if (error) throw error
 
-      const mapped = (data || []).map((row) => ({
-        ...row,
-        record_type: row.doctor_id ? 'doctor_note' : 'patient_report',
+      const { data: prescriptions } = await supabase
+        .from('prescriptions')
+        .select('*')
+        .eq('patient_id', patientId)
+        .eq('doctor_id', doctorId)
+        .order('created_at', { ascending: false })
+
+      const rxByAppointment = new Map()
+      for (const rx of prescriptions || []) {
+        if (rx.appointment_id && !rxByAppointment.has(rx.appointment_id)) {
+          rxByAppointment.set(rx.appointment_id, rx)
+        }
+      }
+
+      const mapped = (data || []).map((row) => {
+        const parsed = parseMedicalDetails(row.details)
+        const rx = row.appointment_id ? rxByAppointment.get(row.appointment_id) : null
+        return {
+          ...row,
+          visitDate: row.created_at,
+          symptoms: parsed.symptoms,
+          diagnosis: parsed.diagnosis || row.title,
+          notes: parsed.notes || row.details,
+          record_type: row.doctor_id ? 'doctor_note' : 'patient_report',
+          immutable: true,
+          prescriptions: rx
+            ? [{
+                id: rx.id,
+                medicines: rx.medicines || [],
+                instructions: rx.notes || '',
+                createdAt: rx.created_at,
+              }]
+            : [],
+        }
+      })
+
+      const allPrescriptions = (prescriptions || []).map((rx) => ({
+        id: rx.id,
+        appointment_id: rx.appointment_id,
+        medicines: rx.medicines || [],
+        instructions: rx.notes || '',
+        createdAt: rx.created_at,
         immutable: true,
       }))
 
-      return res.json({ success: true, data: mapped })
+      const latestHistory = mapped.find((row) => row.doctor_id === doctorId) || mapped[0] || null
+
+      return res.json({
+        success: true,
+        patient,
+        latestAppointment: {
+          id: latestAppt.id,
+          status: latestAppt.status,
+          slot_date: latestAppt.slot_date,
+          slot_time: latestAppt.slot_time,
+        },
+        latestHistoryId: latestHistory?.id || null,
+        data: mapped,
+        history: mapped,
+        prescriptions: allPrescriptions,
+        allPrescriptions,
+      })
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message })
     }
@@ -285,10 +364,15 @@ doctorMedicalRouter.get(
 
       if (error) throw error
 
-      return res.json({
-        success: true,
-        data: (data || []).map((r) => ({ ...r, immutable: true })),
-      })
+      const prescriptions = (data || []).map((r) => ({
+        ...r,
+        medicines: r.medicines || [],
+        instructions: r.notes || '',
+        createdAt: r.created_at,
+        immutable: true,
+      }))
+
+      return res.json({ success: true, data: prescriptions, prescriptions })
     } catch (err) {
       return res.status(500).json({ success: false, message: err.message })
     }

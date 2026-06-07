@@ -19,27 +19,35 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const setAuthToken = (newToken) => {
+  const setAuthToken = (newToken, sessionUser = null) => {
     if (newToken) {
       localStorage.setItem('token', newToken)
       setToken(newToken)
+      if (sessionUser) {
+        setUser(sessionUser)
+        setLoading(false)
+      }
     } else {
       localStorage.removeItem('token')
       setToken('')
       setUser(null)
+      setLoading(false)
     }
   }
 
   const logout = () => {
     setAuthToken(null)
+    window.location.assign('/')
   }
 
-  const fetchUser = async () => {
+  const fetchUser = async ({ hasSession = false } = {}) => {
     if (!token) {
+      setUser(null)
       setLoading(false)
       return
     }
 
+    if (!hasSession) setLoading(true)
     try {
       const { data } = await axios.get(`${API_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -58,7 +66,12 @@ export const AuthProvider = ({ children }) => {
   }
 
   useEffect(() => {
-    fetchUser()
+    if (!token) {
+      setUser(null)
+      setLoading(false)
+      return
+    }
+    fetchUser({ hasSession: !!user })
   }, [token])
 
   const getRedirectPath = (role) => ROLE_REDIRECT[role === 'super_admin' ? 'superadmin' : role] || '/'

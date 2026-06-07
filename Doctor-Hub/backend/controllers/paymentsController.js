@@ -14,7 +14,7 @@ export async function createPayment(req, res) {
       return res.status(403).json({ success: false, message: 'Only patients can upload payment proof' })
     }
 
-    const { appointment_id } = req.body
+    const appointment_id = req.body.appointment_id || req.body.appointmentId
     if (!appointment_id) {
       return res.status(400).json({ success: false, message: 'appointment_id is required' })
     }

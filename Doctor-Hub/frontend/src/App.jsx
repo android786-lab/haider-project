@@ -6,6 +6,8 @@ import About from './pages/About'
 import Contact from './pages/Contact'
 import Register from './pages/Register'
 import Login from './pages/Login'
+import AdminLogin from './pages/AdminLogin'
+import AdminRegister from './pages/AdminRegister'
 import ForgotPassword from './pages/ForgotPassword'
 import Unauthorized from './pages/Unauthorized'
 import NotFound from './pages/NotFound'
@@ -21,6 +23,7 @@ import DoctorAppointmentDetail from './pages/doctor/DoctorAppointmentDetail'
 import DoctorAddMedicalRecord from './pages/doctor/DoctorAddMedicalRecord'
 import DoctorAddPrescription from './pages/doctor/DoctorAddPrescription'
 import DoctorPatientHistory from './pages/doctor/DoctorPatientHistory'
+import DoctorMessages from './pages/doctor/DoctorMessages'
 import PatientLayout from './components/patient/PatientLayout'
 import PatientHome from './pages/patient/PatientHome'
 import PatientFindDoctor from './pages/patient/PatientFindDoctor'
@@ -29,6 +32,7 @@ import PatientAppointments from './pages/patient/PatientAppointments'
 import PatientHistory from './pages/patient/PatientHistory'
 import PatientPrescriptions from './pages/patient/PatientPrescriptions'
 import PatientProfile from './pages/patient/PatientProfile'
+import PatientMessages from './pages/patient/PatientMessages'
 import AssistantLayout from './components/assistant/AssistantLayout'
 import AssistantHome from './pages/assistant/AssistantHome'
 import AssistantPendingPayments from './pages/assistant/AssistantPendingPayments'
@@ -37,11 +41,13 @@ import AssistantBookings from './pages/assistant/AssistantBookings'
 import AdminLayout from './components/admin/AdminLayout'
 import AdminHome from './pages/admin/AdminHome'
 import AdminDoctors from './pages/admin/AdminDoctors'
+import AdminAssistants from './pages/admin/AdminAssistants'
 import AdminPatients from './pages/admin/AdminPatients'
 import AdminAppointments from './pages/admin/AdminAppointments'
 import AdminPayments from './pages/admin/AdminPayments'
 import AdminAdmins from './pages/admin/AdminAdmins'
 import AdminUsers from './pages/admin/AdminUsers'
+import AdminApprovals from './pages/admin/AdminApprovals'
 
 const App = () => {
   return (
@@ -53,6 +59,8 @@ const App = () => {
       </Route>
       <Route path="/register" element={<Register />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/admin/register" element={<AdminRegister />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
 
@@ -68,6 +76,7 @@ const App = () => {
         <Route path="doctors" element={<PatientFindDoctor />} />
         <Route path="doctors/:id" element={<PatientDoctorDetail />} />
         <Route path="appointments" element={<PatientAppointments />} />
+        <Route path="messages" element={<PatientMessages />} />
         <Route path="history" element={<PatientHistory />} />
         <Route path="prescriptions" element={<PatientPrescriptions />} />
         <Route path="profile" element={<PatientProfile />} />
@@ -86,6 +95,7 @@ const App = () => {
         <Route path="clinics" element={<DoctorClinics />} />
         <Route path="schedule" element={<DoctorSchedule />} />
         <Route path="appointments" element={<DoctorAppointments />} />
+        <Route path="messages" element={<DoctorMessages />} />
         <Route path="appointments/:appointmentId" element={<DoctorAppointmentDetail />} />
         <Route path="appointments/:appointmentId/medical-record" element={<DoctorAddMedicalRecord />} />
         <Route path="appointments/:appointmentId/prescription" element={<DoctorAddPrescription />} />
@@ -111,20 +121,29 @@ const App = () => {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
+          <ProtectedRoute allowedRoles={['admin', 'superadmin']} loginPath="/admin/login">
             <AdminLayout />
           </ProtectedRoute>
         }
       >
         <Route path="dashboard" element={<AdminHome />} />
         <Route path="doctors" element={<AdminDoctors />} />
+        <Route path="assistants" element={<AdminAssistants />} />
         <Route path="patients" element={<AdminPatients />} />
         <Route path="appointments" element={<AdminAppointments />} />
         <Route path="payments" element={<AdminPayments />} />
         <Route
+          path="approvals"
+          element={
+            <ProtectedRoute allowedRoles={['superadmin']} loginPath="/admin/login">
+              <AdminApprovals />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="admins"
           element={
-            <ProtectedRoute allowedRoles={['superadmin']}>
+            <ProtectedRoute allowedRoles={['superadmin']} loginPath="/admin/login">
               <AdminAdmins />
             </ProtectedRoute>
           }
@@ -132,7 +151,7 @@ const App = () => {
         <Route
           path="users"
           element={
-            <ProtectedRoute allowedRoles={['superadmin']}>
+            <ProtectedRoute allowedRoles={['superadmin']} loginPath="/admin/login">
               <AdminUsers />
             </ProtectedRoute>
           }

@@ -6,6 +6,7 @@ import {
   getAssistants,
   postAssistant,
   patchAssistant,
+  removeAssistant,
 } from '../controllers/assistantsController.js'
 
 const assistantsRouter = express.Router()
@@ -28,7 +29,7 @@ assistantsRouter.post(
     body('email').isEmail(),
     body('password').isLength({ min: 8 }),
     body('phone').optional().isString(),
-    body('doctor_id').optional({ nullable: true }).isUUID(),
+    body('doctor_id').isUUID().withMessage('doctor_id is required — assign assistant to a doctor'),
     body('clinic_id').optional({ nullable: true }).isUUID(),
   ],
   validate,
@@ -48,6 +49,14 @@ assistantsRouter.patch(
   ],
   validate,
   patchAssistant
+)
+
+assistantsRouter.delete(
+  '/:id',
+  authorizeRoles('admin', 'super_admin'),
+  [param('id').isUUID()],
+  validate,
+  removeAssistant
 )
 
 export default assistantsRouter

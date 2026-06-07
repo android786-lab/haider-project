@@ -22,7 +22,7 @@ const AdminAppointments = () => {
     if (filters.date) params.set('date', filters.date)
 
     api.get(`/api/admin/appointments?${params}`)
-      .then(({ data }) => { if (data.success) setAppointments(data.appointments) })
+      .then(({ data }) => { if (data.success) setAppointments(data.appointments || data.data || []) })
       .catch(console.error)
       .finally(() => setLoading(false))
   }
